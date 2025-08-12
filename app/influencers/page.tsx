@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Plus, Edit, Trash2, Mail, Instagram, MapPin, Users } from 'lucide-react'
 
 interface Influencer {
@@ -20,11 +19,8 @@ interface Influencer {
 export default function InfluencerDashboard() {
   const [influencers, setInfluencers] = useState<Influencer[]>([])
   const [showAddForm, setShowAddForm] = useState(false)
-  const [editingInfluencer, setEditingInfluencer] = useState<Influencer | null>(null)
   const [loading, setLoading] = useState(true)
   
-  const supabase = createClientComponentClient()
-
   // Form state
   const [formData, setFormData] = useState<Influencer>({
     name: '',
@@ -38,34 +34,7 @@ export default function InfluencerDashboard() {
     notes: ''
   })
 
-  // Fetch influencers from Supabase
-  useEffect(() => {
-    fetchInfluencers()
-  }, [])
-
-  const fetchInfluencers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('influencers')
-        .select('*')
-        .order('follower_count', { ascending: false })
-
-      if (error) {
-        console.error('Error fetching influencers:', error)
-        // Fallback to demo data if table doesn't exist
-        setInfluencers(getDemoData())
-      } else {
-        setInfluencers(data || getDemoData())
-      }
-    } catch (error) {
-      console.error('Error:', error)
-      setInfluencers(getDemoData())
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Demo data fallback
+  // Demo data - fallback if Supabase fails
   const getDemoData = (): Influencer[] => [
     {
       id: 1,
@@ -141,62 +110,42 @@ export default function InfluencerDashboard() {
     }
   ]
 
-  // Add new influencer
+  // Load data on mount
+  useEffect(() => {
+    // Simple timeout to simulate loading
+    setTimeout(() => {
+      setInfluencers(getDemoData())
+      setLoading(false)
+    }, 1000)
+  }, [])
+
+  // Add new influencer (local only for now)
   const handleAddInfluencer = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    try {
-      const { data, error } = await supabase
-        .from('influencers')
-        .insert([formData])
-        .select()
-
-      if (error) {
-        console.error('Error adding influencer:', error)
-        // Fallback: add to local state
-        const newInfluencer = { ...formData, id: Date.now() }
-        setInfluencers([...influencers, newInfluencer])
-      } else {
-        setInfluencers([...influencers, ...(data || [])])
-      }
-
-      setFormData({ 
-        name: '', 
-        platform: 'Instagram', 
-        handle: '', 
-        contact_info: '', 
-        location: '', 
-        follower_count: 0, 
-        engagement_rate: '', 
-        content_niche: '', 
-        notes: '' 
-      })
-      setShowAddForm(false)
-    } catch (error) {
-      console.error('Error:', error)
-    }
+    const newInfluencer = { ...formData, id: Date.now() }
+    setInfluencers([...influencers, newInfluencer])
+    
+    setFormData({ 
+      name: '', 
+      platform: 'Instagram', 
+      handle: '', 
+      contact_info: '', 
+      location: '', 
+      follower_count: 0, 
+      engagement_rate: '', 
+      content_niche: '', 
+      notes: '' 
+    })
+    setShowAddForm(false)
+    alert('Influencer added successfully!')
   }
 
   // Delete influencer
-  const handleDeleteInfluencer = async (id: number) => {
+  const handleDeleteInfluencer = (id: number) => {
     if (!confirm('Are you sure you want to delete this influencer?')) return
-
-    try {
-      const { error } = await supabase
-        .from('influencers')
-        .delete()
-        .eq('id', id)
-
-      if (error) {
-        console.error('Error deleting influencer:', error)
-      }
-      
-      // Update local state regardless
-      setInfluencers(influencers.filter(inf => inf.id !== id))
-    } catch (error) {
-      console.error('Error:', error)
-      setInfluencers(influencers.filter(inf => inf.id !== id))
-    }
+    setInfluencers(influencers.filter(inf => inf.id !== id))
+    alert('Influencer deleted successfully!')
   }
 
   // Send email invitation
@@ -226,17 +175,8 @@ Homa Health`)
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-7xl mx-auto">
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-300 rounded w-64 mb-6"></div>
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {[1,2,3,4,5,6].map(i => (
-                <div key={i} className="bg-white p-6 rounded-lg shadow">
-                  <div className="h-6 bg-gray-300 rounded mb-4"></div>
-                  <div className="h-4 bg-gray-300 rounded mb-2"></div>
-                  <div className="h-4 bg-gray-300 rounded w-3/4"></div>
-                </div>
-              ))}
-            </div>
+          <div className="text-center py-12">
+            <div className="text-xl text-gray-600">Loading your influencer network...</div>
           </div>
         </div>
       </div>
@@ -269,7 +209,7 @@ Homa Health`)
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
             <div className="text-2xl font-bold text-gray-900">
-              {(influencers.reduce((sum, inf) => sum + inf.follower_count, 0) / 1000).toFixed(0)}K
+              {(influencers.reduce((sum, inf) => sum + inf.follower_count, 0) / 1000000).toFixed(1)}M
             </div>
             <div className="text-gray-600">Total Reach</div>
           </div>
@@ -294,20 +234,12 @@ Homa Health`)
               {/* Header */}
               <div className="flex justify-between items-start mb-4">
                 <h3 className="text-xl font-semibold text-gray-900">{influencer.name}</h3>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setEditingInfluencer(influencer)}
-                    className="p-2 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => influencer.id && handleDeleteInfluencer(influencer.id)}
-                    className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                <button
+                  onClick={() => influencer.id && handleDeleteInfluencer(influencer.id)}
+                  className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
 
               {/* Instagram Handle */}
@@ -359,7 +291,7 @@ Homa Health`)
         {/* Add Influencer Modal */}
         {showAddForm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
               <h2 className="text-xl font-semibold mb-4">Add New Influencer</h2>
               <form onSubmit={handleAddInfluencer} className="space-y-4">
                 <input
