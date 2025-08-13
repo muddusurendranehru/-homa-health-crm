@@ -1,392 +1,625 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Edit, Trash2, Mail, Instagram, MapPin, Users } from 'lucide-react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { Plus, Mail, MapPin, Users, TrendingUp, Instagram, Search, Filter, MoreVertical, Edit, Trash2 } from 'lucide-react'
 
 interface Influencer {
-  id?: number
+  id: string
   name: string
   platform: string
   handle: string
   contact_info: string
   location: string
   follower_count: number
-  engagement_rate: string
+  engagement_rate: number
   content_niche: string
-  notes?: string
+  notes: string
+  created_at: string
 }
 
-export default function InfluencerDashboard() {
-  const [influencers, setInfluencers] = useState<Influencer[]>([])
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [loading, setLoading] = useState(true)
-  
-  // Form state
-  const [formData, setFormData] = useState<Influencer>({
-    name: '',
+// Demo data as fallback
+const demoInfluencers: Influencer[] = [
+  {
+    id: '1',
+    name: 'Dr. Sarah Mitchell',
     platform: 'Instagram',
-    handle: '',
-    contact_info: '',
-    location: '',
-    follower_count: 0,
-    engagement_rate: '',
-    content_niche: '',
-    notes: ''
-  })
+    handle: '@drsarahmitchell',
+    contact_info: 'sarah@healthinfluencer.com',
+    location: 'Los Angeles, CA',
+    follower_count: 125000,
+    engagement_rate: 4.2,
+    content_niche: 'Women\'s Health',
+    notes: 'Specializes in PCOS and fertility content',
+    created_at: '2024-01-15'
+  },
+  {
+    id: '2',
+    name: 'Fitness Coach Mike',
+    platform: 'Instagram',
+    handle: '@fitnesscoachmike',
+    contact_info: 'mike@fitnessmike.com',
+    location: 'Miami, FL',
+    follower_count: 89000,
+    engagement_rate: 5.1,
+    content_niche: 'Fitness & Nutrition',
+    notes: 'Great engagement with workout videos',
+    created_at: '2024-01-20'
+  }
+]
 
-  // Demo data - fallback if Supabase fails
-  const getDemoData = (): Influencer[] => [
-    {
-      id: 1,
-      name: "Dr. Sagari Ananda",
-      platform: "Instagram",
-      handle: "@dr.sagariananda",
-      follower_count: 45000,
-      content_niche: "Family Medicine",
-      location: "Hyderabad",
-      contact_info: "sagari.ananda@example.com",
-      engagement_rate: "3.2",
-      notes: "Family physician, NDTV contributor"
-    },
-    {
-      id: 2,
-      name: "Dr. Rajender Ramagiri",
-      platform: "Instagram",
-      handle: "@doctor.rajender",
-      follower_count: 38000,
-      content_niche: "Diabetes Care",
-      location: "Hyderabad",
-      contact_info: "rajender.ramagiri@example.com",
-      engagement_rate: "4.1",
-      notes: "Claims 3000+ reversed cases"
-    },
-    {
-      id: 3,
-      name: "Dr. Manasa Mynepally",
-      platform: "Instagram",
-      handle: "@drmanasamynepally",
-      follower_count: 25000,
-      content_niche: "Endocrinology",
-      location: "Khajaguda, Hyderabad",
-      contact_info: "manasa.mynepally@example.com",
-      engagement_rate: "3.8",
-      notes: "Diabetes/thyroid specialist"
-    },
-    {
-      id: 4,
-      name: "Dr. Prudwiraj S",
-      platform: "Instagram",
-      handle: "@drprudwiraj",
-      follower_count: 22000,
-      content_niche: "General Medicine",
-      location: "Gachibowli, Hyderabad",
-      contact_info: "prudwiraj.s@example.com",
-      engagement_rate: "2.9",
-      notes: "Magna Clinic & Arete Hospitals"
-    },
-    {
-      id: 5,
-      name: "Pooja Ganesh",
-      platform: "Instagram",
-      handle: "@nutritionist_inkannada",
-      follower_count: 632000,
-      content_niche: "Nutrition",
-      location: "Bangalore",
-      contact_info: "pooja.ganesh@example.com",
-      engagement_rate: "5.2",
-      notes: "Award-winning, strong South India presence"
-    },
-    {
-      id: 6,
-      name: "Fit Saida",
-      platform: "Instagram",
-      handle: "@fitsaida_fit",
-      follower_count: 527000,
-      content_niche: "Fitness",
-      location: "Hyderabad",
-      contact_info: "fit.saida@example.com",
-      engagement_rate: "2.32",
-      notes: "Fitness athlete, major Hyderabad audience"
-    }
-  ]
+export default function InfluencersPage() {
+  const [influencers, setInfluencers] = useState<Influencer[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [supabaseConnected, setSupabaseConnected] = useState(false)
+  
+  const supabase = createClientComponentClient()
 
-  // Load data on mount
+  // Test Supabase connection and fetch data
   useEffect(() => {
-    // Simple timeout to simulate loading
-    setTimeout(() => {
-      setInfluencers(getDemoData())
-      setLoading(false)
-    }, 1000)
-  }, [])
+    async function fetchInfluencers() {
+      try {
+        console.log('🔄 Attempting to connect to Supabase...')
+        setLoading(true)
+        setError(null)
 
-  // Add new influencer (local only for now)
-  const handleAddInfluencer = async (e: React.FormEvent) => {
+        // Test connection first
+        const { data: testData, error: testError } = await supabase
+          .from('influencers')
+          .select('count(*)')
+          .limit(1)
+
+        if (testError) {
+          console.error('❌ Supabase connection failed:', testError)
+          setError(`Supabase connection failed: ${testError.message}`)
+          setSupabaseConnected(false)
+          setInfluencers(demoInfluencers)
+          return
+        }
+
+        console.log('✅ Supabase connected successfully')
+        setSupabaseConnected(true)
+
+        // Fetch actual data
+        const { data, error: fetchError } = await supabase
+          .from('influencers')
+          .select('*')
+          .order('created_at', { ascending: false })
+
+        if (fetchError) {
+          console.error('❌ Failed to fetch influencers:', fetchError)
+          setError(`Failed to fetch data: ${fetchError.message}`)
+          setInfluencers(demoInfluencers)
+          return
+        }
+
+        console.log('✅ Fetched influencers:', data)
+        
+        if (data && data.length > 0) {
+          setInfluencers(data)
+        } else {
+          console.log('⚠️ No influencers found, using demo data')
+          setInfluencers(demoInfluencers)
+        }
+
+      } catch (err) {
+        console.error('❌ Unexpected error:', err)
+        setError(`Unexpected error: ${err instanceof Error ? err.message : 'Unknown error'}`)
+        setSupabaseConnected(false)
+        setInfluencers(demoInfluencers)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchInfluencers()
+  }, [supabase])
+
+  // Fixed: Add new influencer handler with proper error handling
+  const handleAddInfluencer = (e: React.MouseEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     
-    const newInfluencer = { ...formData, id: Date.now() }
-    setInfluencers([...influencers, newInfluencer])
+    console.log('🔄 Add Influencer button clicked - handleAddInfluencer called')
+    console.log('🔄 Current showAddForm state:', showAddForm)
     
-    setFormData({ 
-      name: '', 
-      platform: 'Instagram', 
-      handle: '', 
-      contact_info: '', 
-      location: '', 
-      follower_count: 0, 
-      engagement_rate: '', 
-      content_niche: '', 
-      notes: '' 
+    try {
+      console.log('🔄 Setting showAddForm to true...')
+      setShowAddForm(true)
+      console.log('✅ showAddForm should now be true')
+    } catch (err) {
+      console.error('❌ Error opening add form:', err)
+      alert('Error opening add form. Please check console for details.')
+    }
+  }
+
+  // Debug function to test state
+  const debugAddForm = () => {
+    console.log('🐛 Debug - Current showAddForm:', showAddForm)
+    console.log('🐛 Debug - Manually setting showAddForm to true')
+    setShowAddForm(true)
+  }
+
+  // Fixed: Instagram link handler
+  const handleInstagramClick = (handle: string) => {
+    try {
+      console.log('🔄 Instagram link clicked:', handle)
+      
+      // Remove @ symbol if present
+      const cleanHandle = handle.replace('@', '')
+      const instagramUrl = `https://www.instagram.com/${cleanHandle}`
+      
+      console.log('🔗 Opening Instagram URL:', instagramUrl)
+      window.open(instagramUrl, '_blank', 'noopener,noreferrer')
+    } catch (err) {
+      console.error('❌ Error opening Instagram:', err)
+      alert(`Error opening Instagram profile for ${handle}`)
+    }
+  }
+
+  // Simple add form component
+  const AddInfluencerForm = () => {
+    console.log('🎨 AddInfluencerForm component rendered')
+    
+    const [formData, setFormData] = useState({
+      name: '',
+      platform: 'Instagram',
+      handle: '',
+      contact_info: '',
+      location: '',
+      follower_count: '',
+      engagement_rate: '',
+      content_niche: '',
+      notes: ''
     })
-    setShowAddForm(false)
-    alert('Influencer added successfully!')
-  }
+    const [submitting, setSubmitting] = useState(false)
 
-  // Delete influencer
-  const handleDeleteInfluencer = (id: number) => {
-    if (!confirm('Are you sure you want to delete this influencer?')) return
-    setInfluencers(influencers.filter(inf => inf.id !== id))
-    alert('Influencer deleted successfully!')
-  }
+    const handleClose = () => {
+      console.log('🔄 Closing add form modal')
+      setShowAddForm(false)
+    }
 
-  // Send email invitation
-  const handleSendInvitation = (influencer: Influencer) => {
-    const subject = encodeURIComponent(`Collaboration Opportunity - Dr. Muddu Surendra Nehru MD`)
-    const body = encodeURIComponent(`Dear ${influencer.name},
+    const handleSubmit = async (e: React.FormEvent) => {
+      e.preventDefault()
+      setSubmitting(true)
 
-I hope this message finds you well. I am Dr. Muddu Surendra Nehru, and I've been following your excellent work in ${influencer.content_niche}.
+      try {
+        console.log('🔄 Submitting new influencer:', formData)
 
-I would like to explore a potential collaboration opportunity that could benefit both our audiences. Your expertise and reach of ${influencer.follower_count.toLocaleString()} followers would be invaluable.
+        if (supabaseConnected) {
+          const { data, error } = await supabase
+            .from('influencers')
+            .insert([{
+              ...formData,
+              follower_count: parseInt(formData.follower_count) || 0,
+              engagement_rate: parseFloat(formData.engagement_rate) || 0
+            }])
+            .select()
 
-Would you be available for a brief call to discuss this further?
+          if (error) {
+            console.error('❌ Supabase insert failed:', error)
+            throw error
+          }
 
-Best regards,
-Dr. Muddu Surendra Nehru MD
-Homa Health`)
+          console.log('✅ Influencer added to Supabase:', data)
+          
+          // Refresh the list
+          const { data: updatedData } = await supabase
+            .from('influencers')
+            .select('*')
+            .order('created_at', { ascending: false })
+          
+          if (updatedData) {
+            setInfluencers(updatedData)
+          }
+        } else {
+          // Add to demo data if Supabase not connected
+          const newInfluencer: Influencer = {
+            id: Date.now().toString(),
+            ...formData,
+            follower_count: parseInt(formData.follower_count) || 0,
+            engagement_rate: parseFloat(formData.engagement_rate) || 0,
+            created_at: new Date().toISOString()
+          }
+          setInfluencers(prev => [newInfluencer, ...prev])
+          console.log('✅ Influencer added to demo data')
+        }
 
-    window.open(`mailto:${influencer.contact_info}?subject=${subject}&body=${body}`)
-  }
+        handleClose()
+        setFormData({
+          name: '',
+          platform: 'Instagram',
+          handle: '',
+          contact_info: '',
+          location: '',
+          follower_count: '',
+          engagement_rate: '',
+          content_niche: '',
+          notes: ''
+        })
 
-  // Open Instagram profile
-  const openInstagram = (handle: string) => {
-    window.open(`https://instagram.com/${handle.replace('@', '')}`, '_blank')
-  }
+      } catch (err) {
+        console.error('❌ Error adding influencer:', err)
+        alert(`Error adding influencer: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      } finally {
+        setSubmitting(false)
+      }
+    }
 
-  if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center py-12">
-            <div className="text-xl text-gray-600">Loading your influencer network...</div>
-          </div>
+      <div 
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        onClick={handleClose}
+      >
+        <div 
+          className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h3 className="text-lg font-semibold mb-4">Add New Influencer</h3>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <input
+              type="text"
+              placeholder="Full Name"
+              value={formData.name}
+              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+              className="w-full p-2 border rounded"
+              required
+            />
+            
+            <select
+              value={formData.platform}
+              onChange={(e) => setFormData(prev => ({ ...prev, platform: e.target.value }))}
+              className="w-full p-2 border rounded"
+            >
+              <option value="Instagram">Instagram</option>
+              <option value="TikTok">TikTok</option>
+              <option value="YouTube">YouTube</option>
+              <option value="Twitter">Twitter</option>
+            </select>
+            
+            <input
+              type="text"
+              placeholder="Handle (e.g., @username)"
+              value={formData.handle}
+              onChange={(e) => setFormData(prev => ({ ...prev, handle: e.target.value }))}
+              className="w-full p-2 border rounded"
+              required
+            />
+            
+            <input
+              type="email"
+              placeholder="Email"
+              value={formData.contact_info}
+              onChange={(e) => setFormData(prev => ({ ...prev, contact_info: e.target.value }))}
+              className="w-full p-2 border rounded"
+            />
+            
+            <input
+              type="text"
+              placeholder="Location"
+              value={formData.location}
+              onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
+              className="w-full p-2 border rounded"
+            />
+            
+            <input
+              type="number"
+              placeholder="Follower Count"
+              value={formData.follower_count}
+              onChange={(e) => setFormData(prev => ({ ...prev, follower_count: e.target.value }))}
+              className="w-full p-2 border rounded"
+            />
+            
+            <input
+              type="number"
+              step="0.1"
+              placeholder="Engagement Rate (%)"
+              value={formData.engagement_rate}
+              onChange={(e) => setFormData(prev => ({ ...prev, engagement_rate: e.target.value }))}
+              className="w-full p-2 border rounded"
+            />
+            
+            <input
+              type="text"
+              placeholder="Content Niche"
+              value={formData.content_niche}
+              onChange={(e) => setFormData(prev => ({ ...prev, content_niche: e.target.value }))}
+              className="w-full p-2 border rounded"
+            />
+            
+            <textarea
+              placeholder="Notes"
+              value={formData.notes}
+              onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+              className="w-full p-2 border rounded"
+              rows={3}
+            />
+            
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {submitting ? 'Adding...' : 'Add Influencer'}
+              </button>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="flex-1 bg-gray-400 text-white p-2 rounded hover:bg-gray-500"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     )
   }
 
+  // Filter influencers based on search
+  const filteredInfluencers = influencers.filter(influencer =>
+    influencer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    influencer.handle.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    influencer.content_niche.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  // Calculate stats
+  const totalInfluencers = influencers.length
+  const totalFollowers = influencers.reduce((sum, inf) => sum + inf.follower_count, 0)
+  const avgEngagement = influencers.length > 0 
+    ? (influencers.reduce((sum, inf) => sum + inf.engagement_rate, 0) / influencers.length).toFixed(1)
+    : '0'
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Influencer Dashboard</h1>
-            <p className="text-gray-600 mt-2">Manage your medical influencer network</p>
-          </div>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 transition-colors"
-          >
-            <Plus className="w-5 h-5" />
-            Add New Influencer
-          </button>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-lg shadow">
-            <div className="text-2xl font-bold text-gray-900">{influencers.length}</div>
-            <div className="text-gray-600">Total Influencers</div>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow">
-            <div className="text-2xl font-bold text-gray-900">
-              {(influencers.reduce((sum, inf) => sum + inf.follower_count, 0) / 1000000).toFixed(1)}M
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Homa Health CRM</h1>
+              <p className="text-gray-600 mt-1">Medical Influencer Management</p>
+              {!supabaseConnected && (
+                <p className="text-amber-600 text-sm mt-1">⚠️ Using demo data - Supabase not connected</p>
+              )}
+              {supabaseConnected && (
+                <p className="text-green-600 text-sm mt-1">✅ Connected to Supabase</p>
+              )}
             </div>
-            <div className="text-gray-600">Total Reach</div>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow">
-            <div className="text-2xl font-bold text-gray-900">
-              {new Set(influencers.map(inf => inf.content_niche)).size}
-            </div>
-            <div className="text-gray-600">Specialties</div>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow">
-            <div className="text-2xl font-bold text-gray-900">
-              {new Set(influencers.map(inf => inf.location.split(',')[0])).size}
-            </div>
-            <div className="text-gray-600">Cities</div>
-          </div>
-        </div>
-
-        {/* Influencer Grid */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {influencers.map((influencer) => (
-            <div key={influencer.id} className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition-shadow">
-              {/* Header */}
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="text-xl font-semibold text-gray-900">{influencer.name}</h3>
-                <button
-                  onClick={() => influencer.id && handleDeleteInfluencer(influencer.id)}
-                  className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Instagram Handle */}
+            <div className="flex gap-2">
               <button
-                onClick={() => openInstagram(influencer.handle)}
-                className="flex items-center gap-2 text-blue-600 hover:text-blue-800 mb-3 group"
+                onClick={handleAddInfluencer}
+                type="button"
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
               >
-                <Instagram className="w-4 h-4" />
-                <span className="group-hover:underline">{influencer.handle}</span>
+                <Plus className="h-5 w-5" />
+                Add New Influencer
               </button>
-
-              {/* Followers */}
-              <div className="flex items-center gap-2 text-gray-600 mb-3">
-                <Users className="w-4 h-4" />
-                <span>{influencer.follower_count.toLocaleString()} followers</span>
-              </div>
-
-              {/* Location */}
-              <div className="flex items-center gap-2 text-gray-600 mb-3">
-                <MapPin className="w-4 h-4" />
-                <span>{influencer.location}</span>
-              </div>
-
-              {/* Content Niche & Engagement */}
-              <div className="mb-2">
-                <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mr-2">
-                  {influencer.content_niche}
-                </span>
-                <span className="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
-                  {influencer.engagement_rate}% engagement
-                </span>
-              </div>
-
-              {/* Notes */}
-              <p className="text-gray-700 mb-4">{influencer.notes}</p>
-
-              {/* Action Button */}
+              
+              {/* Debug button - remove after testing */}
               <button
-                onClick={() => handleSendInvitation(influencer)}
-                className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                onClick={debugAddForm}
+                type="button"
+                className="bg-red-500 text-white px-3 py-2 rounded-lg text-sm"
+                title="Debug button - click if main button doesn't work"
               >
-                <Mail className="w-4 h-4" />
-                Send Collaboration Invite
+                DEBUG
               </button>
             </div>
-          ))}
-        </div>
-
-        {/* Add Influencer Modal */}
-        {showAddForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-              <h2 className="text-xl font-semibold mb-4">Add New Influencer</h2>
-              <form onSubmit={handleAddInfluencer} className="space-y-4">
-                <input
-                  type="text"
-                  placeholder="Full Name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full p-3 border border-gray-300 rounded-lg"
-                  required
-                />
-                <select
-                  value={formData.platform}
-                  onChange={(e) => setFormData({...formData, platform: e.target.value})}
-                  className="w-full p-3 border border-gray-300 rounded-lg"
-                  required
-                >
-                  <option value="Instagram">Instagram</option>
-                  <option value="YouTube">YouTube</option>
-                  <option value="LinkedIn">LinkedIn</option>
-                  <option value="Twitter">Twitter</option>
-                </select>
-                <input
-                  type="text"
-                  placeholder="Handle (@username)"
-                  value={formData.handle}
-                  onChange={(e) => setFormData({...formData, handle: e.target.value})}
-                  className="w-full p-3 border border-gray-300 rounded-lg"
-                  required
-                />
-                <input
-                  type="number"
-                  placeholder="Followers Count"
-                  value={formData.follower_count || ''}
-                  onChange={(e) => setFormData({...formData, follower_count: parseInt(e.target.value) || 0})}
-                  className="w-full p-3 border border-gray-300 rounded-lg"
-                  required
-                />
-                <input
-                  type="text"
-                  placeholder="Content Niche/Specialty"
-                  value={formData.content_niche}
-                  onChange={(e) => setFormData({...formData, content_niche: e.target.value})}
-                  className="w-full p-3 border border-gray-300 rounded-lg"
-                  required
-                />
-                <input
-                  type="text"
-                  placeholder="Location"
-                  value={formData.location}
-                  onChange={(e) => setFormData({...formData, location: e.target.value})}
-                  className="w-full p-3 border border-gray-300 rounded-lg"
-                  required
-                />
-                <input
-                  type="email"
-                  placeholder="Contact Email"
-                  value={formData.contact_info}
-                  onChange={(e) => setFormData({...formData, contact_info: e.target.value})}
-                  className="w-full p-3 border border-gray-300 rounded-lg"
-                  required
-                />
-                <input
-                  type="text"
-                  placeholder="Engagement Rate (e.g., 3.2)"
-                  value={formData.engagement_rate}
-                  onChange={(e) => setFormData({...formData, engagement_rate: e.target.value})}
-                  className="w-full p-3 border border-gray-300 rounded-lg"
-                />
-                <textarea
-                  placeholder="Notes/Bio"
-                  value={formData.notes}
-                  onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                  className="w-full p-3 border border-gray-300 rounded-lg"
-                  rows={3}
-                />
-                <div className="flex gap-3">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg"
-                  >
-                    Add Influencer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddForm(false)}
-                    className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 rounded-lg"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
           </div>
-        )}
+        </div>
       </div>
+
+      {/* Error Display */}
+      {error && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-800">❌ {error}</p>
+            <p className="text-red-600 text-sm mt-1">Check console for more details</p>
+          </div>
+        </div>
+      )}
+
+      {/* Stats Dashboard */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Users className="h-6 w-6 text-blue-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Total Influencers</p>
+                <p className="text-2xl font-bold text-gray-900">{totalInfluencers}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <TrendingUp className="h-6 w-6 text-green-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Total Reach</p>
+                <p className="text-2xl font-bold text-gray-900">{totalFollowers.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <TrendingUp className="h-6 w-6 text-purple-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Avg Engagement</p>
+                <p className="text-2xl font-bold text-gray-900">{avgEngagement}%</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="p-2 bg-orange-100 rounded-lg">
+                <Mail className="h-6 w-6 text-orange-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Active Campaigns</p>
+                <p className="text-2xl font-bold text-gray-900">12</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Search and Filters */}
+        <div className="bg-white rounded-lg shadow mb-6">
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                <input
+                  type="text"
+                  placeholder="Search influencers..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <button className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 flex items-center gap-2">
+                <Filter className="h-5 w-5" />
+                Filters
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Influencers List */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Influencers ({filteredInfluencers.length})
+            </h2>
+          </div>
+          
+          {loading ? (
+            <div className="p-8 text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="text-gray-600 mt-2">Loading influencers...</p>
+            </div>
+          ) : filteredInfluencers.length === 0 ? (
+            <div className="p-8 text-center">
+              <p className="text-gray-500">No influencers found</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Influencer
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Platform & Handle
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Followers
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Engagement
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Niche
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Location
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredInfluencers.map((influencer) => (
+                    <tr key={influencer.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{influencer.name}</div>
+                          <div className="text-sm text-gray-500">{influencer.contact_info}</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <Instagram className="h-4 w-4 text-pink-500 mr-2" />
+                          <button
+                            onClick={() => handleInstagramClick(influencer.handle)}
+                            className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                          >
+                            {influencer.handle}
+                          </button>
+                        </div>
+                        <div className="text-sm text-gray-500">{influencer.platform}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {influencer.follower_count.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          {influencer.engagement_rate}%
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {influencer.content_niche}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <div className="flex items-center">
+                          <MapPin className="h-4 w-4 mr-1" />
+                          {influencer.location}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex items-center gap-2">
+                          <button className="text-gray-400 hover:text-gray-600">
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button className="text-gray-400 hover:text-red-600">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                          <button className="text-gray-400 hover:text-gray-600">
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Debug info - remove after testing */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+        <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-sm">
+          <strong>Debug Info:</strong> showAddForm = {showAddForm.toString()} | 
+          Influencers count = {influencers.length} | 
+          Supabase connected = {supabaseConnected.toString()}
+        </div>
+      </div>
+
+      {/* Add Form Modal */}
+      {showAddForm && (
+        <div>
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-40"></div>
+          <AddInfluencerForm />
+        </div>
+      )}
     </div>
   )
 }
