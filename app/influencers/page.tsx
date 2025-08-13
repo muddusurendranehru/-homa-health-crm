@@ -69,7 +69,7 @@ export default function InfluencersPage() {
         // Test connection first
         const { data: testData, error: testError } = await supabase
           .from('influencers')
-          .select('count(*)')
+         .select('id')
           .limit(1)
 
         if (testError) {
