@@ -11,8 +11,8 @@ interface Influencer {
   handle: string
   contact_info: string
   location: string
-  follower_count: number
-  engagement_rate: number
+  follower_count: number | null
+  engagement_rate: number | null
   content_niche: string
   notes: string
   created_at: string
@@ -66,10 +66,10 @@ export default function InfluencersPage() {
         setLoading(true)
         setError(null)
 
-        // Test connection first
+        // Test connection first - FIXED SQL syntax
         const { data: testData, error: testError } = await supabase
           .from('influencers')
-         .select('id')
+          .select('id')
           .limit(1)
 
         if (testError) {
@@ -368,11 +368,11 @@ export default function InfluencersPage() {
     influencer.content_niche.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  // Calculate stats
+  // Calculate stats with NULL safety
   const totalInfluencers = influencers.length
-  const totalFollowers = influencers.reduce((sum, inf) => sum + inf.follower_count, 0)
+  const totalFollowers = influencers.reduce((sum, inf) => sum + (inf.follower_count || 0), 0)
   const avgEngagement = influencers.length > 0 
-    ? (influencers.reduce((sum, inf) => sum + inf.engagement_rate, 0) / influencers.length).toFixed(1)
+    ? (influencers.reduce((sum, inf) => sum + (inf.engagement_rate || 0), 0) / influencers.length).toFixed(1)
     : '0'
 
   return (
@@ -424,6 +424,15 @@ export default function InfluencersPage() {
           </div>
         </div>
       )}
+
+      {/* Debug info - remove after testing */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+        <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-sm">
+          <strong>Debug Info:</strong> showAddForm = {showAddForm.toString()} | 
+          Influencers count = {influencers.length} | 
+          Supabase connected = {supabaseConnected.toString()}
+        </div>
+      </div>
 
       {/* Stats Dashboard */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -566,11 +575,11 @@ export default function InfluencersPage() {
                         <div className="text-sm text-gray-500">{influencer.platform}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {influencer.follower_count.toLocaleString()}
+                        {(influencer.follower_count || 0).toLocaleString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          {influencer.engagement_rate}%
+                          {(influencer.engagement_rate || 0)}%
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -601,15 +610,6 @@ export default function InfluencersPage() {
               </table>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Debug info - remove after testing */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
-        <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-sm">
-          <strong>Debug Info:</strong> showAddForm = {showAddForm.toString()} | 
-          Influencers count = {influencers.length} | 
-          Supabase connected = {supabaseConnected.toString()}
         </div>
       </div>
 
